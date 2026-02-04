@@ -77,7 +77,7 @@ Example Output:
 # Accuracy: 100%
 # Improvement: India detection via IN prefix, conflict resolution, unit conversions, Adding some examples
 # =============================================================================
-PROMPT_V3 = """You are a logistics data extractor for freight forwarding emails. Extract shipment details into structured JSON format.
+PROMPT_V3 = """You are a logistics data extractor for freight forwarding emails. Extract shipment details into structured JSON format. Always give more priority to body instead of subject of the email.
 
 ### Output Schema
 

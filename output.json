@@ -1,14 +1,14 @@
 [
   {
-    "id": "EMAIL_001",
-    "product_line": "pl_sea_export_lcl",
-    "origin_port_code": "INMAA",
-    "origin_port_name": "Chennai",
-    "destination_port_code": "KRPUS",
-    "destination_port_name": "Busan",
+    "id": "EMAIL_013",
+    "product_line": "pl_sea_import_lcl",
+    "origin_port_code": null,
+    "origin_port_name": "Ambarli / Izmir",
+    "destination_port_code": null,
+    "destination_port_name": "Chennai ICD / Hyderabad ICD / Bangalore ICD",
     "incoterm": "FOB",
-    "cargo_weight_kg": 1980.0,
-    "cargo_cbm": 3.8,
+    "cargo_weight_kg": 600.0,
+    "cargo_cbm": 2.4,
     "is_dangerous": false
   }
 ]
