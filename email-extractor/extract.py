@@ -47,60 +47,67 @@ def load_json(path: Path):
 def create_port_mapping(port_codes_data: List[Dict]) -> Dict[str, str]:
     """
     Creates a mapping from Port Code to Canonical Port Name.
-    Handles duplicates? The Reference file says: 
-    "Some ports have multiple name entries mapping to the same code"
-    We should probably create a mapping of Code -> Name. 
-    If multiple names exist, maybe take the first one or a specific one? 
-    The README says: "Always use the canonical name from port_codes_reference.json for the matched code"
-    Let's assume the first entry for a code in the list is the canonical one, or just map all code occurrences.
+    
+    When multiple names exist for the same code, prefer the simplest/primary name:
+    - Prefer names without "ICD" suffix
+    - Prefer names without "/" (which indicate multiple locations)
+    - Prefer shorter names (likely the primary port name)
+    
+    Example: For INMAA, prefer "Chennai" over "Bangalore ICD" or "Chennai ICD"
     """
-    mapping = {}
-    for entry in port_codes_data:
-        code = entry.get("code")
-        name = entry.get("name")
-        if code and name:
-            # If code already exists, do we overwrite? 
-            # Example: INMAA -> Chennai, INMAA -> Chennai ICD.
-            # Usually the first one is simpler, or we prefer the one that matches text.
-            # But here we need a canonical name. Let's stick to the first one found or overwrite?
-            # README says "regardless of how the port was named in the email".
-            # Let's map code -> name.
-            if code not in mapping:
-                mapping[code] = name
-    return mapping
+    code_mapped: Dict[str, str] = {}
+    
+    for item in port_codes_data:
+        code = item.get("code", "").strip()
+        name = item.get("name", "").strip()
+        
+        if not code or not name:
+            continue
+            
+        # Split and clean in one go
+        name_parts = [
+            cleaned 
+            for part in name.split("/")
+            if (cleaned := part.strip())  # walrus operator - Python 3.8+
+        ]
+        
+        for cleaned_name in name_parts:
+            # Optional: avoid overwriting if you want to keep first occurrence only
+            # if cleaned_name not in code_mapped:
+            code_mapped[cleaned_name.upper()] = code
+            
+    return code_mapped
 
 def post_process_result(result: ExtractionResult, port_mapping: Dict[str, str]) -> ExtractionResult:
     """
     Apply business rules and normalization.
-    1. Canonical Port Names from Reference.
-    2. Null handling for Port Codes not in Reference? 
-       README: "If a port isn't in the reference file, use null for the code"
-       This implies if LLM hallucinates a code not in provided list, we should null it.
+    Look up port codes from port names using the name->code mapping.
+    If a port name isn't in the reference file, set code to null.
     """
     
-    # Normalize Origin Port
-    if result.origin_port_code:
-        canonical_name = port_mapping.get(result.origin_port_code)
-        if canonical_name:
-            result.origin_port_name = canonical_name
+    # Look up Origin Port Code from Name
+    if result.origin_port_name:
+        logging.info(f"Looking up origin code for: {result.origin_port_name.upper()}")
+        port_code = port_mapping.get(result.origin_port_name.upper())
+        if port_code:
+            result.origin_port_code = port_code
         else:
-            # Code not in reference
+            # Name not in reference - keep name, set code to null
             result.origin_port_code = None
-            result.origin_port_name = None
     else:
-        result.origin_port_name = None
+        result.origin_port_code = None
 
-    # Normalize Destination Port
-    if result.destination_port_code:
-        canonical_name = port_mapping.get(result.destination_port_code)
-        if canonical_name:
-            result.destination_port_name = canonical_name
+    # Look up Destination Port Code from Name
+    if result.destination_port_name:
+        logging.info(f"Looking up destination code for: {result.destination_port_name.upper()}")
+        port_code = port_mapping.get(result.destination_port_name.upper())
+        if port_code:
+            result.destination_port_code = port_code
         else:
-             # Code not in reference
+            # Name not in reference - keep name, set code to null
             result.destination_port_code = None
-            result.destination_port_name = None
     else:
-        result.destination_port_name = None
+        result.destination_port_code = None
 
     return result
 
@@ -116,6 +123,8 @@ def process_email(client: Groq, email_data: Dict, port_mapping: Dict[str, str]) 
 
     retries = 3
     base_delay = 2
+
+    logging.info(f"Mapped ports : {port_mapping}")
 
     for attempt in range(retries):
         try:
@@ -202,6 +211,7 @@ def main():
                 "cargo_cbm": None,
                 "is_dangerous": False
             })
+        break
         
         # Save incrementally every 5 emails
         if (i + 1) % 5 == 0:
