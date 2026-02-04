@@ -1,3 +1,4 @@
 1trial/
 .env
 .venv/
+__pycache__
