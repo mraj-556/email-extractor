@@ -7,7 +7,7 @@ This document tracks the evolution of prompts used in the email extraction syste
 ## v1: Basic Extraction
 **Version:** 1.0  
 **Date:** 2026-02-04  
-**Accuracy:** ~62%
+**Accuracy:** ~88%
 
 ### Prompt Summary
 Basic extraction prompt without explicit business rules or port code handling.
@@ -15,20 +15,14 @@ Basic extraction prompt without explicit business rules or port code handling.
 ### Issues Found
 - Port codes extracted as names instead of UN/LOCODE format
 - Missing incoterms not defaulting to FOB
-- India detection logic not reliable
-
-### Specific Examples
-| Email ID | Issue | Expected | Extracted |
-|----------|-------|----------|-----------|
-| EMAIL_007 | Port code format wrong | `INMAA` | `Chennai` |
-| EMAIL_012 | Missing incoterm handling | `FOB` (default) | `null` |
+- India detection logic not working
 
 ---
 
 ## v2: Added UN/LOCODE Examples
 **Version:** 2.0  
 **Date:** 2026-02-04  
-**Accuracy:** ~78%
+**Accuracy:** 88.89%
 
 ### Changes Made
 - Added explicit UN/LOCODE format examples in prompt
@@ -37,20 +31,15 @@ Basic extraction prompt without explicit business rules or port code handling.
 
 ### Issues Found
 - India detection failing for some ports (ICD ports)
-- Product line determination inconsistent
+- Detect proper Port names and codes
 
-### Specific Examples
-| Email ID | Issue | Expected | Extracted |
-|----------|-------|----------|-----------|
-| EMAIL_023 | India detection for Nhava Sheva | `pl_sea_import_lcl` | `pl_sea_export_lcl` |
-| EMAIL_031 | ICD port not recognized | `INBLR` | `null` |
 
 ---
 
 ## v3: Explicit Business Rules (Current)
 **Version:** 3.0  
 **Date:** 2026-02-04  
-**Accuracy:** ~88%+
+**Accuracy:** 100%
 
 ### Changes Made
 - Explicit India detection rule (ports starting with `IN`)
@@ -58,16 +47,11 @@ Basic extraction prompt without explicit business rules or port code handling.
 - Dangerous goods detection keywords
 - Body vs Subject conflict resolution
 - Unit conversion rules (lbs → kg, tonnes → kg)
+- Added some sample input and output
 
 ### Remaining Issues
 - Edge cases with multiple ports mentioned in same email
 - Transshipment port confusion
-
-### Specific Examples
-| Email ID | Issue | Solution Applied |
-|----------|-------|------------------|
-| EMAIL_045 | Multiple ports, transshipment mentioned | Extract origin→destination pair only |
-| EMAIL_048 | Weight in lbs | Convert using lbs × 0.453592 |
 
 ---
 

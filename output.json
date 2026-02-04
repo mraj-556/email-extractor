@@ -2,7 +2,7 @@
   {
     "id": "EMAIL_001",
     "product_line": "pl_sea_export_lcl",
-    "origin_port_code": "KRPUS",
+    "origin_port_code": "INMAA",
     "origin_port_name": "Chennai",
     "destination_port_code": "KRPUS",
     "destination_port_name": "Busan",

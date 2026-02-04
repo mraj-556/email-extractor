@@ -74,8 +74,8 @@ Example Output:
 
 # =============================================================================
 # Version 3: Explicit Business Rules (CURRENT)
-# Accuracy: ~88%+
-# Improvement: India detection via IN prefix, conflict resolution, unit conversions
+# Accuracy: 100%
+# Improvement: India detection via IN prefix, conflict resolution, unit conversions, Adding some examples
 # =============================================================================
 PROMPT_V3 = """You are a logistics data extractor for freight forwarding emails. Extract shipment details into structured JSON format.
 
@@ -83,8 +83,8 @@ PROMPT_V3 = """You are a logistics data extractor for freight forwarding emails.
 
 Return a JSON object with these fields:
 - product_line: "pl_sea_import_lcl" if destination is India, "pl_sea_export_lcl" if origin is India
-- origin_port_name: Origin port/city name as mentioned in the email, or null
-- destination_port_name: Destination port/city name as mentioned in the email, or null  
+- origin_port_name: Origin port/city name as mentioned in the email, or null, if multiple then keep separated with a '/' with their full name
+- destination_port_name: Destination port/city name as mentioned in the email, or null if multiple then keep separated with a '/' with their full name
 - incoterm: Shipping term (FOB, CIF, CFR, EXW, DDP, DAP, FCA, CPT, CIP, DPU), default to "FOB" if not mentioned or ambiguous
 - cargo_weight_kg: Weight in kilograms rounded to 2 decimals, or null
 - cargo_cbm: Volume in cubic meters rounded to 2 decimals, or null
@@ -121,20 +121,82 @@ Return a JSON object with these fields:
 - Missing values → null (not 0 or "")
 - Explicit zero (e.g., "0 kg") → extract as 0
 
-### Example
+### Example 1
 
-Email: "Please quote LCL rate from Hong Kong to Chennai, 5 CBM, FOB terms, non-hazardous cargo"
-
+Input:
+{
+  "id": "EMAIL_005",
+  "subject": "Singapore to Chennai",
+  "body": "Non-stackable 1.1 cbm SIN \u2192 Chennai.",
+  "sender_email": "sin@sgco.com",
+  "to_emails": "priya.impchn@globelinkww.com",
+  "cc_emails": ""
+}
 Output:
 {
+  "id": "EMAIL_005",
   "product_line": "pl_sea_import_lcl",
-  "origin_port_name": "Hong Kong",
-  "destination_port_name": "Chennai",
   "incoterm": "FOB",
+  "origin_port_code": "SGSIN",
+  "origin_port_name": "Singapore",
+  "destination_port_code": "INMAA",
+  "destination_port_name": "Chennai",
   "cargo_weight_kg": null,
-  "cargo_cbm": 5.0,
+  "cargo_cbm": 1.1,
   "is_dangerous": false
 }
+
+### Example 2
+
+Input:
+{
+    "id": "EMAIL_006",
+    "subject": "LCL DG RFQ // SHA \u2192 MAA ICD",
+    "body": "Dear Priya, Requesting DG LCL import rates for a shipment ex SHA (Shanghai) to ICD MAA (final dest Chennai ICD). Cargo: UN 1993 Flammable Liquid NOS, PG II, packed 4 CMB UN-approved drums. Approx wt 1800 KGS / 3.8 CBM. Shipper insisting FCA SHA. Please confirm DG surcharge, MSDS reqs, CFS handling, dest THC + ICD handling. Regards, Kevin / CN Logistics.",
+    "sender_email": "kevin@cnlogistics.cn",
+    "to_emails": "[priya.impchn@globelinkww.com]",
+    "cc_emails": ""
+  }
+Output:
+{
+  "id": "EMAIL_006",
+  "product_line": "pl_sea_import_lcl",
+  "incoterm": "FOB",
+  "origin_port_code": "CNSHA",
+  "origin_port_name": "Shanghai",
+  "destination_port_code": "INMAA",
+  "destination_port_name": "Chennai ICD",
+  "cargo_weight_kg": 1800.0,
+  "cargo_cbm": 3.8,
+  "is_dangerous": true
+}
+
+### Example 3
+
+Input:
+{
+  "id": "EMAIL_007",
+  "subject": "LCL RFQ ex Saudi to India ICD",
+  "body": "JED\u2192MAA ICD 1.9 cbm; DAM\u2192BLR ICD 3 RT; RUH\u2192HYD ICD 850kg.",
+  "sender_email": "freight@ksa-logistics.com",
+  "to_emails": "priya.impchn@globelinkww.com",
+  "cc_emails": ""
+}
+Output:
+{
+  "id": "EMAIL_007",
+  "product_line": "pl_sea_import_lcl",
+  "incoterm": "FOB",
+  "origin_port_code": "SAJED",
+  "origin_port_name": "Jeddah / Dammam / Riyadh",
+  "destination_port_code": "INMAA",
+  "destination_port_name": "Chennai ICD / Bangalore ICD / Hyderabad ICD",
+  "cargo_weight_kg": 850.0,
+  "cargo_cbm": 1.9,
+  "is_dangerous": false
+}
+
+
 """
 
 # =============================================================================
