@@ -201,7 +201,7 @@ Output:
 
 # =============================================================================
 # Version 4: RT Handling, Code-to-Name, Multi-Item Fix (CURRENT)
-# Accuracy: TBD
+# Accuracy: 97.78
 # Improvement: RT conversion, port code expansion, first-item rule, port name cleaning
 # =============================================================================
 PROMPT_V4 = """You are a logistics data extractor for freight forwarding emails. Extract shipment details into structured JSON format. Always give more priority to body instead of subject of the email in case of any conflicting details.
