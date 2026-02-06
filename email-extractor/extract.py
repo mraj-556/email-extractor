@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import sys
+import re
 from typing import List, Dict, Optional
 from pathlib import Path
 
@@ -139,6 +140,84 @@ def find_port_code(
     return codes[0]
 
 
+# Port code to name mapping for common codes that LLM might return
+PORT_CODE_TO_NAME = {
+    "PUS": "Busan",
+    "MAA": "Chennai",
+    "SHA": "Shanghai",
+    "BLR": "Bangalore ICD",
+    "HYD": "Hyderabad ICD",
+    "JED": "Jeddah",
+    "SIN": "Singapore",
+    "HKG": "Hong Kong",
+    "YOK": "Yokohama",
+    "CPT": "Cape Town",
+    "HOU": "Houston",
+    "LAX": "Los Angeles",
+    "MNL": "Manila",
+    "HCM": "Ho Chi Minh",
+    "SUB": "Surabaya",
+    "KEL": "Keelung",
+    "JBL": "Jebel Ali",
+    "HAM": "Hamburg",
+    "DAM": "Dammam",
+    "RUH": "Riyadh",
+}
+
+
+def normalize_port_name_display(port_name: str) -> str:
+    """
+    Normalize port name for display:
+    1. Convert to Title Case (Shanghai, not SHANGHAI)
+    2. Normalize spacing around slashes ("Xingang / Tianjin", not "Xingang/Tianjin")
+    3. Strip city/country suffixes (Ambarli, not Ambarli, Istanbul)
+    4. Convert port codes to full names (PUS -> Busan)
+    """
+    if not port_name:
+        return port_name
+    
+    # First, check if the entire name is a port code
+    upper_name = port_name.strip().upper()
+    if upper_name in PORT_CODE_TO_NAME:
+        return PORT_CODE_TO_NAME.get(upper_name)
+    
+    
+    # Split by slash (with or without spaces)
+    parts = re.split(r'\s*/\s*', port_name)
+    
+    normalized_parts = []
+    for part in parts:
+        part = part.strip()
+        
+        # Check if this part is a port code
+        if part.upper() in PORT_CODE_TO_NAME:
+            part = PORT_CODE_TO_NAME.get(part.upper())
+        else:
+            # Strip city/country suffix after comma (e.g., "Ambarli, Istanbul" -> "Ambarli")
+            if ',' in part:
+                part = part.split(',')[0].strip()
+            
+            # Convert to Title Case
+            # Handle "ICD" specially to keep it uppercase
+            if 'icd' in part.lower():
+                # Split into words and handle ICD
+                words = part.split()
+                title_words = []
+                for word in words:
+                    if word.upper() == 'ICD':
+                        title_words.append('ICD')
+                    else:
+                        title_words.append(word.title())
+                part = ' '.join(title_words)
+            else:
+                part = part.title()
+        
+        normalized_parts.append(part)
+    
+    # Join with " / " (space-slash-space)
+    return " / ".join(normalized_parts)
+
+
 def post_process_result(
     result: ExtractionResult, 
     name_to_all_codes: Dict[str, List[str]],
@@ -148,6 +227,13 @@ def post_process_result(
     Apply business rules and normalization.
     Uses product_line to determine country context for port selection.
     """
+    
+    # Normalize port names first (Title Case, spacing, etc.)
+    if result.origin_port_name:
+        result.origin_port_name = normalize_port_name_display(result.origin_port_name)
+    
+    if result.destination_port_name:
+        result.destination_port_name = normalize_port_name_display(result.destination_port_name)
     
     # Determine country context based on product_line
     is_import_to_india = result.product_line == "pl_sea_import_lcl"
@@ -176,6 +262,7 @@ def post_process_result(
         result.destination_port_code = None
 
     return result
+
 
 
 def process_email(
