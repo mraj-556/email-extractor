@@ -42,19 +42,33 @@ def load_json(path: Path):
     with open(path, 'r') as f:
         return json.load(f)
 
-def create_port_mapping(port_codes_data: List[Dict]) -> tuple[Dict[str, str], Dict[str, List[str]]]:
+def normalize_port_name(name: str) -> str:
     """
-    Creates two mappings:
-    1. name_to_code: Port Name -> Primary Code (for backward compatibility)
-    2. name_to_all_codes: Port Name -> List of ALL codes for that name
+    Normalize a port name for flexible matching.
+    Splits by '/', strips whitespace, sorts alphabetically, and rejoins.
     
-    This handles cases where the same port name maps to multiple codes
-    (e.g., "Chennai" -> ["INMAA", "KRPUS"])
+    Example: "Chennai ICD / Bangalore ICD / Hyderabad ICD" 
+          -> "BANGALORE ICD|CHENNAI ICD|HYDERABAD ICD"
+    """
+    parts = [p.strip().upper() for p in name.split("/") if p.strip()]
+    parts.sort()
+    return "|".join(parts)
+
+
+def create_port_mapping(port_codes_data: List[Dict]) -> tuple[Dict[str, str], Dict[str, str], Dict[str, List[str]], Dict[str, List[str]]]:
+    """
+    Creates four mappings:
+    1. name_to_code: Exact name -> first code found
+    2. normalized_to_code: Normalized name -> first code found  
+    3. name_to_all_codes: Exact name -> list of ALL codes
+    4. normalized_to_all_codes: Normalized name -> list of ALL codes
     
-    Example: For INMAA, prefer "Chennai" over "Bangalore ICD" or "Chennai ICD"
+    The "all_codes" mappings allow country-preference filtering when multiple codes exist.
     """
     name_to_code: Dict[str, str] = {}
+    normalized_to_code: Dict[str, str] = {}
     name_to_all_codes: Dict[str, List[str]] = {}
+    normalized_to_all_codes: Dict[str, List[str]] = {}
     
     for item in port_codes_data:
         code = item.get("code", "").strip()
@@ -62,52 +76,49 @@ def create_port_mapping(port_codes_data: List[Dict]) -> tuple[Dict[str, str], Di
         
         if not code or not name:
             continue
-            
-        # Split and clean in one go
-        name_parts = [
-            cleaned 
-            for part in name.split("/")
-            if (cleaned := part.strip())  # walrus operator - Python 3.8+
-        ]
         
-        for cleaned_name in name_parts:
-            upper_name = cleaned_name.upper()
+        upper_name = name.upper()
+        normalized_name = normalize_port_name(name)
+        
+        # First occurrence as default
+        if upper_name not in name_to_code:
+            name_to_code[upper_name] = code
+        if normalized_name not in normalized_to_code:
+            normalized_to_code[normalized_name] = code
+        
+        # Track ALL codes for each name
+        if upper_name not in name_to_all_codes:
+            name_to_all_codes[upper_name] = []
+        if code not in name_to_all_codes[upper_name]:
+            name_to_all_codes[upper_name].append(code)
             
-            # Add to all_codes list
-            if upper_name not in name_to_all_codes:
-                name_to_all_codes[upper_name] = []
-            if code not in name_to_all_codes[upper_name]:
-                name_to_all_codes[upper_name].append(code)
+        if normalized_name not in normalized_to_all_codes:
+            normalized_to_all_codes[normalized_name] = []
+        if code not in normalized_to_all_codes[normalized_name]:
+            normalized_to_all_codes[normalized_name].append(code)
             
-            # Keep first occurrence as primary (backward compatible)
-            if upper_name not in name_to_code:
-                name_to_code[upper_name] = code
-            
-    return name_to_code, name_to_all_codes
+    return name_to_code, normalized_to_code, name_to_all_codes, normalized_to_all_codes
 
 
-def get_port_code_with_country_preference(
+def find_port_code(
     port_name: str, 
     name_to_all_codes: Dict[str, List[str]], 
+    normalized_to_all_codes: Dict[str, List[str]],
     country_prefix: Optional[str] = None
 ) -> Optional[str]:
     """
-    Get port code for a port name, preferring codes that match the country prefix.
-    
-    Args:
-        port_name: The port name to look up (e.g., "Chennai")
-        name_to_all_codes: Mapping of port names to all their codes
-        country_prefix: Expected country code prefix (e.g., "IN" for India)
-    
-    Returns:
-        The best matching port code, or None if not found
-    
-    Example:
-        "Chennai" with country_prefix="IN" -> "INMAA" (not "KRPUS")
-        "Chennai" with country_prefix=None -> first available code
+    Find port code by trying exact match first, then normalized match.
+    If multiple codes exist for a name, prefer codes matching the country_prefix.
     """
     upper_name = port_name.upper()
+    normalized_name = normalize_port_name(port_name)
+    
+    # Get all matching codes (try exact first, then normalized)
     codes = name_to_all_codes.get(upper_name, [])
+    if not codes:
+        codes = normalized_to_all_codes.get(normalized_name, [])
+        if codes:
+            logger.info(f"Matched '{port_name}' via normalized lookup")
     
     if not codes:
         return None
@@ -116,29 +127,26 @@ def get_port_code_with_country_preference(
     if len(codes) == 1:
         return codes[0]
     
-    # Multiple codes exist - filter by country prefix if provided
+    # Multiple codes exist - prefer country_prefix match
     if country_prefix:
-        matching_codes = [c for c in codes if c.startswith(country_prefix.upper())]
-        if matching_codes:
-            logger.info(f"Multiple codes for '{port_name}': {codes}. Selected '{matching_codes[0]}' (matches {country_prefix} prefix)")
-            return matching_codes[0]
+        matching = [c for c in codes if c.startswith(country_prefix.upper())]
+        if matching:
+            logger.info(f"Multiple codes for '{port_name}': {codes}. Selected '{matching[0]}' (matches {country_prefix} prefix)")
+            return matching[0]
     
-    # No country preference or no match - return first code
+    # No preference or no match - return first
     logger.info(f"Multiple codes for '{port_name}': {codes}. Using first: '{codes[0]}'")
     return codes[0]
 
+
 def post_process_result(
     result: ExtractionResult, 
-    name_to_all_codes: Dict[str, List[str]]
+    name_to_all_codes: Dict[str, List[str]],
+    normalized_to_all_codes: Dict[str, List[str]]
 ) -> ExtractionResult:
     """
     Apply business rules and normalization.
-    Look up port codes from port names using country-aware selection.
-    
-    Business Logic:
-    - For imports (destination=India): destination should have IN prefix
-    - For exports (origin=India): origin should have IN prefix
-    - Uses product_line to determine direction
+    Uses product_line to determine country context for port selection.
     """
     
     # Determine country context based on product_line
@@ -147,38 +155,34 @@ def post_process_result(
     
     # Look up Origin Port Code from Name
     if result.origin_port_name:
-        # For exports from India, prefer IN prefix for origin
-        origin_country_prefix = "IN" if is_export_from_india else None
-        logging.info(f"Looking up origin code for: {result.origin_port_name} (country_preference: {origin_country_prefix})")
-        
-        result.origin_port_code = get_port_code_with_country_preference(
-            result.origin_port_name, 
-            name_to_all_codes, 
-            country_prefix=origin_country_prefix
+        # For exports FROM India, origin should be Indian port (IN prefix)
+        origin_prefix = "IN" if is_export_from_india else None
+        logging.info(f"Looking up origin code for: {result.origin_port_name} (prefer: {origin_prefix})")
+        result.origin_port_code = find_port_code(
+            result.origin_port_name, name_to_all_codes, normalized_to_all_codes, origin_prefix
         )
     else:
         result.origin_port_code = None
 
     # Look up Destination Port Code from Name  
     if result.destination_port_name:
-        # For imports to India, prefer IN prefix for destination
-        dest_country_prefix = "IN" if is_import_to_india else None
-        logging.info(f"Looking up destination code for: {result.destination_port_name} (country_preference: {dest_country_prefix})")
-        
-        result.destination_port_code = get_port_code_with_country_preference(
-            result.destination_port_name, 
-            name_to_all_codes, 
-            country_prefix=dest_country_prefix
+        # For imports TO India, destination should be Indian port (IN prefix)
+        dest_prefix = "IN" if is_import_to_india else None
+        logging.info(f"Looking up destination code for: {result.destination_port_name} (prefer: {dest_prefix})")
+        result.destination_port_code = find_port_code(
+            result.destination_port_name, name_to_all_codes, normalized_to_all_codes, dest_prefix
         )
     else:
         result.destination_port_code = None
 
     return result
 
+
 def process_email(
     client: Groq, 
     email_data: Dict, 
-    name_to_all_codes: Dict[str, List[str]]
+    name_to_all_codes: Dict[str, List[str]],
+    normalized_to_all_codes: Dict[str, List[str]]
 ) -> Optional[Dict]:
     email_id = email_data.get("id")
     subject = email_data.get("subject", "")
@@ -217,7 +221,7 @@ def process_email(
             result = ExtractionResult(**parsed_data)
             
             # Post Process with country-aware port code selection
-            final_result = post_process_result(result, name_to_all_codes)
+            final_result = post_process_result(result, name_to_all_codes, normalized_to_all_codes)
             
             return final_result.model_dump()
 
@@ -252,15 +256,15 @@ def main():
     emails = load_json(INPUT_FILE)
     port_codes = load_json(PORT_CODES_FILE)
     
-    name_to_code, name_to_all_codes = create_port_mapping(port_codes)
-    logger.info(f"Loaded {len(emails)} emails and {len(name_to_all_codes)} unique port names.")
+    name_to_code, normalized_to_code, name_to_all_codes, normalized_to_all_codes = create_port_mapping(port_codes)
+    logger.info(f"Loaded {len(emails)} emails and {len(name_to_code)} port name entries.")
 
     results = []
     
     logger.info("Starting Extraction...")
     for i, email in enumerate(tqdm(emails, desc="Processing Emails")):
-        result = process_email(client, email, name_to_all_codes)
-        logging.info(f"Input email : {email} \n Output data : {result} ")
+        result = process_email(client, email, name_to_all_codes, normalized_to_all_codes)
+        # logging.info(f"Input email : {email} \n Output data : {result} ")
         if result:
             results.append(result)
         else:
@@ -277,12 +281,11 @@ def main():
                 "cargo_cbm": None,
                 "is_dangerous": False
             })
-        break
         
         # Save incrementally every 5 emails
-        if (i + 1) % 5 == 0:
-            with open(OUTPUT_FILE, 'w') as f:
-                json.dump(results, f, indent=2)
+        # if (i + 1) % 5 == 0:
+        with open(OUTPUT_FILE, 'w') as f:
+            json.dump(results, f, indent=2)
 
     logger.info(f"Extraction complete. Saving final results to {OUTPUT_FILE}...")
     with open(OUTPUT_FILE, 'w') as f:
