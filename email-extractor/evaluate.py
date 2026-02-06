@@ -1,6 +1,12 @@
 import json
 import logging
 import sys
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -14,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DATA_DIR = Path("/data") if Path("/data").exists() else Path("..")
-GROUND_TRUTH_FILE = DATA_DIR / "ground_truth.json"
-OUTPUT_FILE = DATA_DIR / "output.json"
+GROUND_TRUTH_FILE = Path(os.getenv("GROUND_TRUTH_FILE", str(DATA_DIR / "ground_truth.json")))
+OUTPUT_FILE = Path(os.getenv("OUTPUT_FILE", str(DATA_DIR / "output.json")))
 
 FIELDS_TO_EVALUATE = [
     "product_line",

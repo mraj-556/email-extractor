@@ -9,8 +9,13 @@ install docker and docker-compose : https://docs.docker.com/compose/install/
 Copy the .env.example file to same dir where Dockerfile and docker-compose.yml file 
 exists and rename it to .env .Then replace GROQ_API_KEY value with your own API key.
 
-Copy paste your test emails into the emails_input.json file that exists without changing the name same for ground truth and post_codes_reference also. 
+You can also configure the input/output file paths in the .env file if needed:
+INPUT_FILE="/data/emails_input.json"
+PORT_CODES_FILE="/data/port_codes_reference.json"
+OUTPUT_FILE="/data/output.json"
+GROUND_TRUTH_FILE="/data/ground_truth.json"
 
+Copy paste your test emails into the emails_input.json file that exists without changing the name same for ground truth and post_codes_reference also. 
 """
 
 # start with docker

@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DATA_DIR = Path("/data") if Path("/data").exists() else Path("..")
-INPUT_FILE = DATA_DIR / "emails_input.json"
-PORT_CODES_FILE = DATA_DIR / "port_codes_reference.json"
-OUTPUT_FILE = DATA_DIR / "output.json"
+INPUT_FILE = Path(os.getenv("INPUT_FILE", str(DATA_DIR / "emails_input.json")))
+PORT_CODES_FILE = Path(os.getenv("PORT_CODES_FILE", str(DATA_DIR / "port_codes_reference.json")))
+OUTPUT_FILE = Path(os.getenv("OUTPUT_FILE", str(DATA_DIR / "output.json")))
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME")
